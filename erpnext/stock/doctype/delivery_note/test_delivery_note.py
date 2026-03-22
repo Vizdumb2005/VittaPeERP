@@ -64,6 +64,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 					"abbr": self.SDBNB_COMPANY_ABBR,
 					"country": "India",
 					"default_currency": "INR",
+					"enable_perpetual_inventory": 1,
 				}
 			).insert()
 
@@ -74,6 +75,37 @@ class TestDeliveryNote(ERPNextTestSuite):
 		self.sdbnb_expense_account = f"Cost of Goods Sold - {self.SDBNB_COMPANY_ABBR}"
 		self.sdbnb_income_account = f"Sales - {self.SDBNB_COMPANY_ABBR}"
 		self.sdbnb_debit_to = f"Debtors - {self.SDBNB_COMPANY_ABBR}"
+
+	SDBNB_COMPANY_NAME = "_Test SDBNB Company"
+	SDBNB_COMPANY_ABBR = "_TSDBNB"
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._setup_sdbnb_company()
+
+	@classmethod
+	def _setup_sdbnb_company(cls):
+		if frappe.db.exists("Company", cls.SDBNB_COMPANY_NAME):
+			company = frappe.get_doc("Company", cls.SDBNB_COMPANY_NAME)
+		else:
+			company = frappe.get_doc(
+				{
+					"doctype": "Company",
+					"company_name": cls.SDBNB_COMPANY_NAME,
+					"abbr": cls.SDBNB_COMPANY_ABBR,
+					"country": "India",
+					"default_currency": "INR",
+				}
+			).insert()
+
+		cls.sdbnb_company = company.name
+		cls.sdbnb_account = company.stock_delivered_but_not_billed
+		cls.sdbnb_cost_center = company.cost_center
+		cls.sdbnb_warehouse = f"Stores - {cls.SDBNB_COMPANY_ABBR}"
+		cls.sdbnb_expense_account = f"Cost of Goods Sold - {cls.SDBNB_COMPANY_ABBR}"
+		cls.sdbnb_income_account = f"Sales - {cls.SDBNB_COMPANY_ABBR}"
+		cls.sdbnb_debit_to = f"Debtors - {cls.SDBNB_COMPANY_ABBR}"
 
 	def test_delivery_note_qty(self):
 		dn = create_delivery_note(qty=0, do_not_save=True)
@@ -2975,6 +3007,10 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		# SI GL entries should have SDBNB reversal
 		si_gl_entries = get_gl_entries("Sales Invoice", si.name)
+		self.assertTrue(si_gl_entries)
+		self.assertGreater(
+			sum(gle.debit for gle in si_gl_entries if gle.account == self.sdbnb_expense_account), 0
+		)
 		sdbnb_credit = sum(gle.credit for gle in si_gl_entries if gle.account == self.sdbnb_account)
 		cogs_debit = sum(gle.debit for gle in si_gl_entries if gle.account == self.sdbnb_expense_account)
 
@@ -3173,13 +3209,13 @@ class TestDeliveryNote(ERPNextTestSuite):
 		)
 
 		dn = make_dn_from_si(si.name)
-		dn.items[0].expense_account = self.sdbnb_expense_account
+		self.assertEqual(dn.items[0].expense_account, self.sdbnb_expense_account)
 		dn.submit()
 
 		# DN items created from SI have against_sales_invoice set,
 		# so SDBNB should be skipped
 		dn.reload()
-		self.assertNotEqual(dn.items[0].expense_account, self.sdbnb_account)
+		self.assertEqual(dn.items[0].expense_account, self.sdbnb_expense_account)
 
 	def test_sdbnb_non_stock_item_skipped(self):
 		"""Test that non-stock items are not assigned SDBNB account."""

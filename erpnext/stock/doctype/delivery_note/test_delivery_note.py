@@ -1223,7 +1223,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 		self.assertTrue(gl_entries)
 
 		expected_values = {
-			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
+			dn.items[0].expense_account: {"cost_center": cost_center},
 			stock_in_hand_account: {"cost_center": cost_center},
 		}
 		for _i, gle in enumerate(gl_entries):
@@ -1252,7 +1252,7 @@ class TestDeliveryNote(ERPNextTestSuite):
 
 		self.assertTrue(gl_entries)
 		expected_values = {
-			"Cost of Goods Sold - TCP1": {"cost_center": cost_center},
+			dn.items[0].expense_account: {"cost_center": cost_center},
 			stock_in_hand_account: {"cost_center": cost_center},
 		}
 		for _i, gle in enumerate(gl_entries):

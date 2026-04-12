@@ -186,7 +186,7 @@ class BankTransaction(Document):
 
 		remaining_amount = self.unallocated_amount
 		payment_entry_docs = [(pe.payment_document, pe.payment_entry) for pe in self.payment_entries]
-		pe_bt_allocations = get_total_allocated_amount(payment_entry_docs)
+		pe_bt_allocations = get_total_allocated_amount(payment_entry_docs, exclude_bank_transaction=self.name)
 		gl_entries = get_related_bank_gl_entries(payment_entry_docs)
 		gl_bank_account = gl_bank_account or frappe.db.get_value("Bank Account", self.bank_account, "account")
 
@@ -201,10 +201,14 @@ class BankTransaction(Document):
 					gl_bank_account,
 				)
 				if payment_entry.allocated_amount > allocable_amount:
+					excess_amount = flt(
+						payment_entry.allocated_amount - allocable_amount,
+						self.precision("unallocated_amount"),
+					)
 					frappe.throw(
 						_("Voucher {0} is over-allocated by {1}").format(
 							frappe.bold(payment_entry.payment_entry),
-							abs(allocable_amount),
+							excess_amount,
 						)
 					)
 
@@ -254,8 +258,8 @@ class BankTransaction(Document):
 
 		self.update_allocated_amount()
 
-	def validate_over_allocation(self, gl_bank_account, non_bt_vouchers):
-		gl_entries = get_related_bank_gl_entries(non_bt_vouchers)
+	def validate_over_allocation(self, gl_bank_account, payment_vouchers):
+		gl_entries = get_related_bank_gl_entries(payment_vouchers)
 
 		BTP = frappe.qb.DocType("Bank Transaction Payments")
 		BT = frappe.qb.DocType("Bank Transaction")
@@ -263,7 +267,7 @@ class BankTransaction(Document):
 
 		voucher_condition = Criterion.any(
 			(BTP.payment_document == doctype) & (BTP.payment_entry == docname)
-			for doctype, docname in non_bt_vouchers
+			for doctype, docname in payment_vouchers
 		)
 
 		result = (
@@ -291,7 +295,7 @@ class BankTransaction(Document):
 				row["gl_account"]
 			] = row["total"]
 
-		for doctype, docname in non_bt_vouchers:
+		for doctype, docname in payment_vouchers:
 			paid_amount = (gl_entries.get((doctype, docname)) or {}).get(gl_bank_account, 0)
 			allocated = flt(other_allocations.get((doctype, docname), {}).get(gl_bank_account, 0))
 
@@ -528,7 +532,7 @@ def get_related_bank_gl_entries(docs):
 	return entries
 
 
-def get_total_allocated_amount(docs):
+def get_total_allocated_amount(docs, exclude_bank_transaction=None):
 	"""
 	Gets the sum of allocations for a voucher on each bank GL account
 	along with the latest bank transaction date
@@ -555,12 +559,13 @@ def get_total_allocated_amount(docs):
 			WHERE
 				(btp.payment_document, btp.payment_entry) IN %(docs)s
 				AND bt.docstatus = 1
+				AND bt.name != COALESCE(%(exclude_bank_transaction)s, '')
 			WINDOW w AS (PARTITION BY ba.account, btp.payment_document, btp.payment_entry ORDER BY bt.date DESC)
 		) temp
 		WHERE
 			rownum = 1
 		""",
-		dict(docs=docs),
+		dict(docs=docs, exclude_bank_transaction=exclude_bank_transaction),
 		as_dict=True,
 	)
 

@@ -2331,7 +2331,7 @@ class TestStockEntry(ERPNextTestSuite):
 		"Stock Settings", {"sample_retention_warehouse": "_Test Warehouse 1 - _TC"}
 	)
 	def test_sample_retention_stock_entry(self):
-		from erpnext.stock.doctype.stock_entry.stock_entry import move_sample_to_retention_warehouse
+		from erpnext.stock.doctype.stock_entry.manufacturing_handler import move_sample_to_retention_warehouse
 
 		warehouse = "_Test Warehouse - _TC"
 		retain_sample_item = make_item(

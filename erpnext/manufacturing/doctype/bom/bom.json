@@ -749,6 +749,7 @@
   },
   {
    "description": "Controls how raw materials are consumed during the \u2018Manufacture\u2019 stock entry.",
+   "documentation_url": "https://docs.frappe.io/erpnext/bill-of-materials#21-consume-components-based-on",
    "fieldname": "backflush_based_on",
    "fieldtype": "Select",
    "label": "Based On",
@@ -761,7 +762,7 @@
  "image_field": "image",
  "is_submittable": 1,
  "links": [],
- "modified": "2026-04-17 15:22:33.598938",
+ "modified": "2026-04-20 16:41:37.723586",
  "modified_by": "Administrator",
  "module": "Manufacturing",
  "name": "BOM",

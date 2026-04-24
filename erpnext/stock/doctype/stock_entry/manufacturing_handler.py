@@ -1358,6 +1358,126 @@ class StockEntrySABB:
 
 		return serial_nos, batch_nos
 
+	def get_available_reserved_materials(self):
+		from erpnext.stock.doctype.stock_reservation_entry.stock_reservation_entry import (
+			get_reserved_materials,
+		)
+
+		voucher_no = self.se_doc.work_order or self.se_doc.subcontracting_order
+		reserved_entries = get_reserved_materials(voucher_no)
+		if not reserved_entries:
+			return {}
+
+		itemwise_serial_batch_qty = frappe._dict()
+
+		for d in reserved_entries:
+			key = (d.item_code, d.warehouse)
+			if key not in itemwise_serial_batch_qty:
+				itemwise_serial_batch_qty[key] = frappe._dict(
+					{
+						"serial_no": [],
+						"batch_no": defaultdict(float),
+						"batchwise_sn": defaultdict(list),
+					}
+				)
+
+			details = itemwise_serial_batch_qty[key]
+			if d.batch_no:
+				details.batch_no[d.batch_no] += d.qty
+				if d.serial_no:
+					details.batchwise_sn[d.batch_no].extend(d.serial_no.split("\n"))
+			elif d.serial_no:
+				details.serial_no.append(d.serial_no)
+
+		return itemwise_serial_batch_qty
+
+	def set_serial_batch_based_on_reservation(self):
+		if self.se_doc.work_order and frappe.get_cached_value(
+			"Work Order", self.se_doc.work_order, "reserve_stock"
+		):
+			skip_transfer = frappe.get_cached_value("Work Order", self.se_doc.work_order, "skip_transfer")
+			backflush_based_on = get_backflush_based_on(self.se_doc.bom_no)
+
+			if (
+				self.se_doc.purpose not in ["Material Transfer for Manufacture"]
+				and backflush_based_on != "BOM"
+				and not skip_transfer
+			):
+				return
+
+		reservation_entries = self.get_available_reserved_materials()
+		if not reservation_entries:
+			return
+
+		new_items_to_add = []
+		for d in self.se_doc.items:
+			if d.serial_and_batch_bundle or d.serial_no or d.batch_no:
+				continue
+
+			key = (d.item_code, d.s_warehouse)
+			if details := reservation_entries.get(key):
+				original_qty = d.qty
+				if batches := details.get("batch_no"):
+					for batch_no, qty in batches.items():
+						if original_qty <= 0:
+							break
+
+						if qty <= 0:
+							continue
+
+						if d.batch_no and original_qty > 0:
+							new_row = frappe.copy_doc(d)
+							new_row.name = None
+							new_row.batch_no = batch_no
+							new_row.qty = qty
+							new_row.idx = d.idx + 1
+							if new_row.batch_no and details.get("batchwise_sn"):
+								new_row.serial_no = "\n".join(
+									details.get("batchwise_sn")[new_row.batch_no][: cint(new_row.qty)]
+								)
+
+							new_items_to_add.append(new_row)
+							original_qty -= qty
+							batches[batch_no] -= qty
+
+						if qty >= d.qty and not d.batch_no:
+							d.batch_no = batch_no
+							batches[batch_no] -= d.qty
+							if d.batch_no and details.get("batchwise_sn"):
+								d.serial_no = "\n".join(
+									details.get("batchwise_sn")[d.batch_no][: cint(d.qty)]
+								)
+						elif not d.batch_no:
+							d.batch_no = batch_no
+							d.qty = qty
+							original_qty -= qty
+							batches[batch_no] = 0
+
+							if d.batch_no and details.get("batchwise_sn"):
+								d.serial_no = "\n".join(
+									details.get("batchwise_sn")[d.batch_no][: cint(d.qty)]
+								)
+
+				if details.get("serial_no"):
+					d.serial_no = "\n".join(details.get("serial_no")[: cint(d.qty)])
+
+				d.use_serial_batch_fields = 1
+
+		for new_row in new_items_to_add:
+			self.se_doc.append("items", new_row)
+
+		sorted_items = sorted(self.se_doc.items, key=lambda x: x.item_code)
+		if self.se_doc.purpose == "Manufacture":
+			# ensure finished item at last
+			sorted_items = sorted(sorted_items, key=lambda x: x.t_warehouse)
+
+		idx = 0
+		for row in sorted_items:
+			idx += 1
+			row.idx = idx
+
+		self.se_doc.set("items", sorted_items)
+
 
 def get_available_materials(work_order, stock_entry_doc=None) -> dict:
 	data = get_stock_entry_data(work_order, stock_entry_doc=stock_entry_doc)

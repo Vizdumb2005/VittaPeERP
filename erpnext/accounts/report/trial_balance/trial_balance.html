@@ -50,15 +50,20 @@
 		font-weight: 500;
 	}
 
-    .report-subtitle {
-        margin: 10px 0 14px;
-    }
+	.report-subtitle {
+		margin: 10px 0 14px;
+	}
 
 	.text-center { text-align: center; }
+
 	.text-right {
 		text-align: right;
 		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
+
 	.text-left { text-align: left; }
 	.text-bold { font-weight: 700; }
 
@@ -82,7 +87,7 @@
 		color: #7c7c7c;
 	}
 
-	.report-table tbody td {
+	.report-table tbody td.text-left {
 		vertical-align: top;
 		word-wrap: break-word;
 	}

@@ -1379,44 +1379,7 @@ class StockEntry(StockController, SubcontractingInwardController):
 					)
 
 	def update_work_order(self):
-		def _validate_work_order(pro_doc):
-			msg, title = "", ""
-			if flt(pro_doc.docstatus) != 1:
-				msg = f"Work Order {self.work_order} must be submitted"
-
-			if pro_doc.status == "Stopped":
-				msg = f"Transaction not allowed against stopped Work Order {self.work_order}"
-
-			if msg:
-				frappe.throw(_(msg), title=title)
-
-		if self.job_card:
-			job_doc = frappe.get_doc("Job Card", self.job_card)
-			if self.purpose != "Manufacture":
-				job_doc.set_transferred_qty(update_status=True)
-				job_doc.set_transferred_qty_in_job_card_item(self)
-			else:
-				job_doc.set_consumed_qty_in_job_card_item(self)
-				job_doc.set_manufactured_qty()
-				job_doc.update_work_order()
-
-		if self.work_order:
-			pro_doc = frappe.get_doc("Work Order", self.work_order)
-			_validate_work_order(pro_doc)
-
-			if self.fg_completed_qty:
-				if self.docstatus == 1:
-					pro_doc.add_additional_items(self)
-				else:
-					pro_doc.remove_additional_items(self)
-
-				pro_doc.run_method("update_work_order_qty")
-				if self.purpose == "Manufacture":
-					pro_doc.run_method("update_planned_qty")
-
-			pro_doc.run_method("update_status")
-			if not pro_doc.operations:
-				pro_doc.set_actual_dates()
+		ManufactureHandler(self).update_job_card_and_work_order()
 
 	@property
 	def pro_doc(self):

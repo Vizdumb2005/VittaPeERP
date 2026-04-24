@@ -780,6 +780,45 @@ class ManufactureHandler(BaseManufacturingHandler):
 		else:
 			self.add_to_stock_entry_detail({item.item_code: ste_item_details})
 
+	def update_job_card_and_work_order(self):
+		def _validate_work_order(pro_doc):
+			msg, title = "", ""
+			if flt(pro_doc.docstatus) != 1:
+				msg = f"Work Order {self.se_doc.work_order} must be submitted"
+
+			if pro_doc.status == "Stopped":
+				msg = f"Transaction not allowed against stopped Work Order {self.se_doc.work_order}"
+
+			if msg:
+				frappe.throw(_(msg), title=title)
+
+		if self.se_doc.job_card:
+			job_doc = frappe.get_doc("Job Card", self.se_doc.job_card)
+			if self.se_doc.purpose != "Manufacture":
+				job_doc.set_transferred_qty(update_status=True)
+				job_doc.set_transferred_qty_in_job_card_item(self.se_doc)
+			else:
+				job_doc.set_consumed_qty_in_job_card_item(self.se_doc)
+				job_doc.set_manufactured_qty()
+				job_doc.update_work_order()
+
+		if self.se_doc.work_order:
+			_validate_work_order(self.wo_doc)
+
+			if self.se_doc.fg_completed_qty:
+				if self.se_doc.docstatus == 1:
+					self.wo_doc.add_additional_items(self.se_doc)
+				else:
+					self.wo_doc.remove_additional_items(self.se_doc)
+
+				self.wo_doc.run_method("update_work_order_qty")
+				if self.se_doc.purpose == "Manufacture":
+					self.wo_doc.run_method("update_planned_qty")
+
+			self.wo_doc.run_method("update_status")
+			if not self.wo_doc.operations:
+				self.wo_doc.set_actual_dates()
+
 
 class MaterialTransferHandler(BaseManufacturingHandler):
 	# This class is for stock entry type 'Material Transfer for Manufacture'

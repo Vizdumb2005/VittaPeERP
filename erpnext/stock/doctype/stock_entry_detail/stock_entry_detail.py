@@ -223,44 +223,55 @@ class StockEntryDetail(Document):
 			parent_doc.from_warehouse = None
 			self.s_warehouse = None
 
-	def validate_warehouse_for_purpose(self, purpose, has_bom=True, from_warehouse=None, to_warehouse=None):
+	def set_warehouse_based_on_defaults(self, parent_doc):
 		if not self.s_warehouse and not self.t_warehouse:
-			self.s_warehouse = from_warehouse
-			self.t_warehouse = to_warehouse
+			self.s_warehouse = parent_doc.from_warehouse
+			self.t_warehouse = parent_doc.to_warehouse
 
-		if purpose in source_mandatory and not self.s_warehouse:
-			if from_warehouse:
-				self.s_warehouse = from_warehouse
-			else:
-				frappe.throw(_("Source warehouse is mandatory for row {0}").format(self.idx))
+		if parent_doc.purpose in source_mandatory and not self.s_warehouse:
+			if parent_doc.from_warehouse:
+				self.s_warehouse = parent_doc.from_warehouse
 
-		if purpose in target_mandatory and not self.t_warehouse:
-			if to_warehouse:
-				self.t_warehouse = to_warehouse
-			else:
-				frappe.throw(_("Target warehouse is mandatory for row {0}").format(self.idx))
+		if parent_doc.purpose in target_mandatory and not self.t_warehouse:
+			if parent_doc.to_warehouse:
+				self.t_warehouse = parent_doc.to_warehouse
 
-		if purpose == "Manufacture" and has_bom:
+		if parent_doc.purpose == "Manufacture" and parent_doc.bom_no:
 			if self.is_finished_item or self.type or self.is_legacy_scrap_item:
 				self.s_warehouse = None
+			else:
+				self.t_warehouse = None
+
+		if parent_doc.purpose == "Disassemble" and parent_doc.bom_no:
+			if self.is_finished_item or self.type or self.is_legacy_scrap_item:
+				self.t_warehouse = None
+			else:
+				self.s_warehouse = None
+
+	def validate_warehouse(self, parent_doc):
+		if parent_doc.purpose in source_mandatory and not self.s_warehouse:
+			frappe.throw(_("Source warehouse is mandatory for row {0}").format(self.idx))
+
+		if parent_doc.purpose in target_mandatory and not self.t_warehouse:
+			frappe.throw(_("Target warehouse is mandatory for row {0}").format(self.idx))
+
+		if parent_doc.purpose == "Manufacture" and parent_doc.bom_no:
+			if self.is_finished_item or self.type or self.is_legacy_scrap_item:
 				if not self.t_warehouse:
 					frappe.throw(_("Target warehouse is mandatory for row {0}").format(self.idx))
 			else:
-				self.t_warehouse = None
 				if not self.s_warehouse:
 					frappe.throw(_("Source warehouse is mandatory for row {0}").format(self.idx))
 
-		if purpose == "Disassemble" and has_bom:
+		if parent_doc.purpose == "Disassemble" and parent_doc.bom_no:
 			if self.is_finished_item or self.type or self.is_legacy_scrap_item:
-				self.t_warehouse = None
 				if not self.s_warehouse:
 					frappe.throw(_("Source warehouse is mandatory for row {0}").format(self.idx))
 			else:
-				self.s_warehouse = None
 				if not self.t_warehouse:
 					frappe.throw(_("Target warehouse is mandatory for row {0}").format(self.idx))
 
-		if cstr(self.s_warehouse) == cstr(self.t_warehouse) and purpose not in [
+		if cstr(self.s_warehouse) == cstr(self.t_warehouse) and parent_doc.purpose not in [
 			"Material Transfer for Manufacture",
 			"Material Transfer",
 		]:

@@ -554,11 +554,10 @@ class StockEntry(StockController, SubcontractingInwardController):
 	def validate_warehouse(self):
 		"""perform various (sometimes conditional) validations on warehouse"""
 
-		has_bom = any([d.bom_no for d in self.get("items")])
-
 		for d in self.get("items"):
 			d.remove_warehouse_if_not_required(self)
-			d.validate_warehouse_for_purpose(self.purpose, has_bom, self.from_warehouse, self.to_warehouse)
+			d.set_warehouse_based_on_defaults(self)
+			d.validate_warehouse(self)
 
 	def validate_source_stock_entry(self):
 		if not self.get("source_stock_entry"):

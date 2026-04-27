@@ -16,6 +16,7 @@
   "item_name",
   "item_group",
   "stock_uom",
+  "image",
   "column_break0",
   "disabled",
   "is_stock_item",
@@ -40,7 +41,6 @@
   "over_delivery_receipt_allowance",
   "column_break_wugd",
   "over_billing_allowance",
-  "image",
   "section_break_11",
   "brand",
   "description",
@@ -257,6 +257,7 @@
    "description": "Used to create an opening Stock Entry with the Valuation Rate when the item is saved",
    "fieldname": "opening_stock",
    "fieldtype": "Float",
+   "hidden": 1,
    "label": "Opening Stock"
   },
   {
@@ -1077,7 +1078,7 @@
  "image_field": "image",
  "links": [],
  "make_attachments_public": 1,
- "modified": "2026-04-28 17:31:47.613279",
+ "modified": "2026-04-28 17:31:48.613279",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

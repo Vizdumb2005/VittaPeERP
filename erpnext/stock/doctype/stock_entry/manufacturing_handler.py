@@ -73,10 +73,33 @@ class BaseManufacturingHandler:
 	def get_completed_job_card_qty(self):
 		return flt(min([d.completed_qty for d in self.wo_doc.operations]))
 
+	def get_fields_to_fetch_for_items(self):
+		return [
+			"allow_alternative_item",
+			"is_finished_item",
+			"po_detail",
+			"sco_rm_detail",
+			"scio_detail",
+			"sample_quantity",
+			"type",
+			self.se_doc.subcontract_data.rm_detail_field,
+			"original_item",
+			"expense_account",
+			"description",
+			"item_name",
+			"serial_and_batch_bundle",
+			"allow_zero_valuation_rate",
+			"use_serial_batch_fields",
+			"batch_no",
+			"serial_no",
+		]
+
 	def add_to_stock_entry_detail(self, item_dict, bom_no=None):
 		from erpnext.stock.get_item_details import get_default_cost_center
 
 		precision = frappe.get_precision("Stock Entry Detail", "qty")
+		fields = self.get_fields_to_fetch_for_items()
+
 		for d in item_dict:
 			item_row = item_dict[d]
 
@@ -94,38 +117,19 @@ class BaseManufacturingHandler:
 			stock_uom = item_row.get("stock_uom") or frappe.db.get_value("Item", d, "stock_uom")
 			se_child.s_warehouse = item_row.get("from_warehouse")
 			se_child.t_warehouse = item_row.get("to_warehouse")
+			for field in fields:
+				se_child.set(field, item_row.get(field))
+
 			se_child.item_code = item_row.get("item_code") or cstr(d)
 			se_child.uom = item_row["uom"] if item_row.get("uom") else stock_uom
 			se_child.stock_uom = stock_uom
 			se_child.qty = child_qty if child_qty > 0 else 0
-			se_child.allow_alternative_item = item_row.get("allow_alternative_item", 0)
 			se_child.subcontracted_item = item_row.get("main_item_code")
 			se_child.cost_center = item_row.get("cost_center") or get_default_cost_center(
 				item_row, company=self.se_doc.company
 			)
-			se_child.is_finished_item = item_row.get("is_finished_item", 0)
-			se_child.po_detail = item_row.get("po_detail")
-			se_child.sco_rm_detail = item_row.get("sco_rm_detail")
-			se_child.scio_detail = item_row.get("scio_detail")
-			se_child.sample_quantity = item_row.get("sample_quantity", 0)
-			se_child.type = item_row.get("type")
 			se_child.is_legacy_scrap_item = item_row.get("is_legacy")
 			se_child.bom_secondary_item = item_row.get("name") or item_row.get("bom_secondary_item")
-
-			for field in [
-				self.se_doc.subcontract_data.rm_detail_field,
-				"original_item",
-				"expense_account",
-				"description",
-				"item_name",
-				"serial_and_batch_bundle",
-				"allow_zero_valuation_rate",
-				"use_serial_batch_fields",
-				"batch_no",
-				"serial_no",
-			]:
-				if item_row.get(field):
-					se_child.set(field, item_row.get(field))
 
 			if se_child.s_warehouse is None:
 				se_child.s_warehouse = self.se_doc.from_warehouse

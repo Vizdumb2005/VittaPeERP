@@ -742,12 +742,12 @@ $.extend(erpnext.item, {
 				default: companies[0],
 				reqd: 1,
 				onchange: function () {
-					const wh = get_warehouse_for_company(dialog.get_value("company"));
-					dialog.set_value("warehouse", wh);
+					const warehouse = get_warehouse_for_company(dialog.get_value("company"));
+					dialog.set_value("warehouse", warehouse);
 					dialog.set_df_property(
 						"warehouse",
 						"description",
-						wh
+						warehouse
 							? __("Default warehouse from Item Defaults.")
 							: __(
 									"No default warehouse set for this company. Entry will use Stock Settings default."
@@ -789,7 +789,7 @@ $.extend(erpnext.item, {
 					default: frm.doc.serial_no_series || "",
 					reqd: 1,
 					description: __(
-						"Example: SN-.YYYY.-.##### - One serial number will be created per unit of qty."
+						"Example: SN-.YYYY.-.#####. - One serial number will be created per unit of qty."
 					),
 				}
 			);
@@ -797,30 +797,24 @@ $.extend(erpnext.item, {
 
 		if (has_batch) {
 			if (!has_serial) {
-				fields.push({ fieldtype: "Section Break", label: __("Serial / Batch") });
+				fields.push({ fieldtype: "Section Break", label: __("Serial Nos / Batches") });
 			}
 			fields.push(
 				{
 					label: __("Automatically Create New Batch"),
 					fieldname: "create_new_batch",
 					fieldtype: "Check",
-					default: frm.doc.create_new_batch || 0,
-					description: __("Enable to auto-create a batch using the series below."),
-					onchange: function () {
-						const checked = dialog.get_value("create_new_batch");
-						dialog.set_df_property("batch_number_series", "reqd", checked ? 1 : 0);
-						dialog.set_df_property("batch_number_series", "hidden", checked ? 0 : 1);
-					},
+					default: 1,
+					read_only: 1,
 				},
 				{
 					label: __("Batch Number Series"),
 					fieldname: "batch_number_series",
 					fieldtype: "Data",
 					default: frm.doc.batch_number_series || "",
-					reqd: frm.doc.create_new_batch ? 1 : 0,
-					hidden: frm.doc.create_new_batch ? 0 : 1,
+					reqd: 1,
 					description: __(
-						"Example: BATCH-.YYYY.-.##### - A new batch will be auto-created from this series."
+						"Example: BATCH-.YYYY.-.#####. - A new batch will be auto-created from this series."
 					),
 				}
 			);
@@ -848,18 +842,6 @@ $.extend(erpnext.item, {
 					callback: function (r) {
 						if (!r.exc && r.message) {
 							dialog.hide();
-							frappe.show_alert(
-								{
-									message: __("Opening Stock entry created: {0}", [
-										`<a href="${frappe.utils.get_url_to_form(
-											"Stock Entry",
-											r.message
-										)}">${r.message}</a>`,
-									]),
-									indicator: "green",
-								},
-								8
-							);
 							frm.reload_doc();
 						}
 					},

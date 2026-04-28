@@ -1577,6 +1577,12 @@ def make_opening_stock_entry(
 	stock_entry.submit()
 	stock_entry.add_comment("Comment", _("Opening Stock"))
 
+	frappe.msgprint(
+		_("Opening Stock entry created: {0}").format(get_link_to_form("Stock Entry", stock_entry.name)),
+		indicator="green",
+		alert=True,
+	)
+
 	return stock_entry.name
 
 

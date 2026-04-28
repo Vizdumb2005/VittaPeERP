@@ -281,6 +281,11 @@ def get():
 						"account_number": "2211",
 						"account_category": "Trade Payables",
 					},
+					_("Stock Delivered But Not Billed"): {
+						"account_type": "Stock Delivered But Not Billed",
+						"account_number": "2212",
+						"account_category": "Trade Payables",
+					},
 					"account_number": "2200",
 				},
 				_("Duties and Taxes"): {

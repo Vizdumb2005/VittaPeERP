@@ -162,6 +162,10 @@ def get():
 						"account_type": "Stock Received But Not Billed",
 						"account_category": "Trade Payables",
 					},
+					_("Stock Delivered But Not Billed"): {
+						"account_type": "Stock Delivered But Not Billed",
+						"account_category": "Trade Payables",
+					},
 					_("Asset Received But Not Billed"): {
 						"account_type": "Asset Received But Not Billed",
 						"account_category": "Trade Payables",

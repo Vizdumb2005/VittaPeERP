@@ -482,6 +482,12 @@ class DeliveryNote(SellingController):
 
 		for item in self.items:
 			if item.get("against_sales_invoice"):
+				if item.expense_account == sdbnb_account:
+					frappe.throw(
+						_(
+							"Row #{0}: Stock Delivered But Not Billed account cannot be used for items linked to a Sales Invoice"
+						).format(item.idx)
+					)
 				continue
 			is_stock_item = frappe.get_cached_value("Item", item.item_code, "is_stock_item")
 			# Only stock items

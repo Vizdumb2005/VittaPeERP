@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.docstatus import DocStatus
 from frappe.model.document import Document
+from frappe.query_builder import Criterion
+from frappe.query_builder.functions import Sum
 from frappe.utils import flt, getdate
 
 
@@ -134,8 +136,12 @@ class BankTransaction(Document):
 	def before_update_after_submit(self):
 		self.validate_duplicate_references()
 		self.update_allocated_amount()
+
+		gl_bank_account = frappe.db.get_value("Bank Account", self.bank_account, "account")
+		payment_entry_docs = [(pe.payment_document, pe.payment_entry) for pe in self.payment_entries]
+		self.validate_over_allocation(gl_bank_account, payment_entry_docs)
 		self.delink_old_payment_entries()
-		self.allocate_payment_entries()
+		self.allocate_payment_entries(gl_bank_account)
 		self.set_status()
 
 	def on_cancel(self):
@@ -161,7 +167,7 @@ class BankTransaction(Document):
 				},
 			)
 
-	def allocate_payment_entries(self):
+	def allocate_payment_entries(self, gl_bank_account=None):
 		"""Refactored from bank reconciliation tool.
 		Non-zero allocations must be amended/cleared manually
 		Get the bank transaction amount (b) and remove as we allocate
@@ -180,12 +186,34 @@ class BankTransaction(Document):
 
 		remaining_amount = self.unallocated_amount
 		payment_entry_docs = [(pe.payment_document, pe.payment_entry) for pe in self.payment_entries]
-		pe_bt_allocations = get_total_allocated_amount(payment_entry_docs)
+		pe_bt_allocations = get_total_allocated_amount(payment_entry_docs, exclude_bank_transaction=self.name)
 		gl_entries = get_related_bank_gl_entries(payment_entry_docs)
-		gl_bank_account = frappe.db.get_value("Bank Account", self.bank_account, "account")
+		gl_bank_account = gl_bank_account or frappe.db.get_value("Bank Account", self.bank_account, "account")
 
 		for payment_entry in list(self.payment_entries):
 			if payment_entry.allocated_amount != 0:
+				allocable_amount, should_clear, clearance_date = get_clearance_details(
+					self,
+					payment_entry,
+					pe_bt_allocations.get((payment_entry.payment_document, payment_entry.payment_entry))
+					or {},
+					gl_entries.get((payment_entry.payment_document, payment_entry.payment_entry)) or {},
+					gl_bank_account,
+				)
+				if payment_entry.allocated_amount > allocable_amount:
+					excess_amount = flt(
+						payment_entry.allocated_amount - allocable_amount,
+						self.precision("unallocated_amount"),
+					)
+					frappe.throw(
+						_("Voucher {0} is over-allocated by {1}").format(
+							frappe.bold(payment_entry.payment_entry),
+							excess_amount,
+						)
+					)
+
+				if payment_entry.allocated_amount == allocable_amount and should_clear:
+					self.clear_linked_payment_entry(payment_entry, clearance_date=clearance_date)
 				continue
 
 			allocable_amount, should_clear, clearance_date = get_clearance_details(
@@ -196,8 +224,13 @@ class BankTransaction(Document):
 				gl_bank_account,
 			)
 
-			if allocable_amount < 0:
-				frappe.throw(_("Voucher {0} is over-allocated by {1}").format(allocable_amount))
+			if payment_entry.allocated_amount > allocable_amount:
+				frappe.throw(
+					_("Voucher {0} is over-allocated by {1}").format(
+						frappe.bold(payment_entry.payment_entry),
+						abs(allocable_amount),
+					)
+				)
 
 			if remaining_amount <= 0:
 				self.remove(payment_entry)
@@ -224,6 +257,50 @@ class BankTransaction(Document):
 				self.clear_linked_payment_entry(payment_entry, clearance_date=clearance_date)
 
 		self.update_allocated_amount()
+
+	def validate_over_allocation(self, gl_bank_account, payment_vouchers):
+		gl_entries = get_related_bank_gl_entries(payment_vouchers)
+
+		BTP = frappe.qb.DocType("Bank Transaction Payments")
+		BT = frappe.qb.DocType("Bank Transaction")
+		BA = frappe.qb.DocType("Bank Account")
+
+		voucher_condition = Criterion.any(
+			(BTP.payment_document == doctype) & (BTP.payment_entry == docname)
+			for doctype, docname in payment_vouchers
+		)
+
+		result = (
+			frappe.qb.from_(BTP)
+			.left_join(BT)
+			.on(BT.name == BTP.parent)
+			.left_join(BA)
+			.on(BA.name == BT.bank_account)
+			.select(
+				BTP.payment_document,
+				BTP.payment_entry,
+				BA.account.as_("gl_account"),
+				Sum(BTP.allocated_amount).as_("total"),
+			)
+			.where(voucher_condition)
+			.where(BT.docstatus == 1)
+			.where(BT.name != self.name)
+			.groupby(BA.account, BTP.payment_document, BTP.payment_entry)
+			.run(as_dict=True)
+		)
+
+		other_allocations = {}
+		for row in result:
+			other_allocations.setdefault((row["payment_document"], row["payment_entry"]), {})[
+				row["gl_account"]
+			] = row["total"]
+
+		for doctype, docname in payment_vouchers:
+			paid_amount = (gl_entries.get((doctype, docname)) or {}).get(gl_bank_account, 0)
+			allocated = flt(other_allocations.get((doctype, docname), {}).get(gl_bank_account, 0))
+
+			if allocated >= paid_amount and paid_amount > 0:
+				frappe.throw(_("{0} {1} is already fully allocated").format(doctype, frappe.bold(docname)))
 
 	@frappe.whitelist()
 	def remove_payment_entries(self):
@@ -455,7 +532,7 @@ def get_related_bank_gl_entries(docs):
 	return entries
 
 
-def get_total_allocated_amount(docs):
+def get_total_allocated_amount(docs, exclude_bank_transaction=None):
 	"""
 	Gets the sum of allocations for a voucher on each bank GL account
 	along with the latest bank transaction date
@@ -482,12 +559,13 @@ def get_total_allocated_amount(docs):
 			WHERE
 				(btp.payment_document, btp.payment_entry) IN %(docs)s
 				AND bt.docstatus = 1
+				AND bt.name != COALESCE(%(exclude_bank_transaction)s, '')
 			WINDOW w AS (PARTITION BY ba.account, btp.payment_document, btp.payment_entry ORDER BY bt.date DESC)
 		) temp
 		WHERE
 			rownum = 1
 		""",
-		dict(docs=docs),
+		dict(docs=docs, exclude_bank_transaction=exclude_bank_transaction),
 		as_dict=True,
 	)
 

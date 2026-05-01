@@ -1502,3 +1502,127 @@ def get_child_warehouses(warehouse):
 	from erpnext.stock.doctype.warehouse.warehouse import get_child_warehouses
 
 	return get_child_warehouses(warehouse)
+
+
+@frappe.whitelist()
+def make_opening_stock_entry(
+	item_code: str,
+	company: str,
+	qty: float,
+	valuation_rate: float,
+	warehouse: str | None = None,
+	serial_no_series: str | None = None,
+	create_new_batch: int = 0,
+	batch_number_series: str | None = None,
+) -> str:
+	if not frappe.has_permission("Item", "write", item_code):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	item = frappe.get_doc("Item", item_code)
+
+	if not item.is_stock_item:
+		frappe.throw(_("Opening Stock can only be set for stock items."))
+
+	if flt(qty) <= 0:
+		frappe.throw(_("Quantity must be greater than zero."))
+
+	if flt(valuation_rate) < 0:
+		frappe.throw(_("Valuation Rate cannot be negative."))
+
+	if item.has_serial_no and not serial_no_series:
+		frappe.throw(_("Serial No Series is required for serialised items."))
+
+	if item.has_batch_no and cint(create_new_batch) and not batch_number_series:
+		frappe.throw(_("Batch Number Series is required when auto-creating a batch."))
+
+	if warehouse:
+		warehouse_company = frappe.db.get_value("Warehouse", warehouse, "company")
+		if warehouse_company != company:
+			frappe.throw(
+				_("Warehouse {0} does not belong to Company {1}.").format(
+					frappe.bold(warehouse), frappe.bold(company)
+				)
+			)
+
+	target_warehouse = get_default_warehouse_for_opening_stock(item, company, warehouse)
+
+	persist_serial_batch_fields_for_opening_stock(
+		item_code,
+		serial_no_series=serial_no_series,
+		create_new_batch=cint(create_new_batch),
+		batch_number_series=batch_number_series,
+	)
+
+	stock_entry = frappe.get_doc(
+		{
+			"doctype": "Stock Entry",
+			"stock_entry_type": "Material Receipt",
+			"company": company,
+			"items": [
+				{
+					"item_code": item_code,
+					"t_warehouse": target_warehouse,
+					"qty": flt(qty),
+					"basic_rate": flt(valuation_rate),
+					"allow_zero_valuation_rate": 1 if not flt(valuation_rate) else 0,
+					"use_serial_batch_fields": 1,
+					"serial_no_series": serial_no_series,
+					"batch_number_series": batch_number_series if cint(create_new_batch) else None,
+				}
+			],
+		}
+	)
+
+	stock_entry.insert()
+	stock_entry.submit()
+	stock_entry.add_comment("Comment", _("Opening Stock"))
+
+	frappe.msgprint(
+		_("Opening Stock entry created: {0}").format(get_link_to_form("Stock Entry", stock_entry.name)),
+		indicator="green",
+		alert=True,
+	)
+
+	return stock_entry.name
+
+
+def get_default_warehouse_for_opening_stock(item, company: str, warehouse: str | None) -> str:
+	if warehouse:
+		return warehouse
+
+	for default in item.item_defaults:
+		if default.company == company and default.default_warehouse:
+			return default.default_warehouse
+
+	target = frappe.get_single_value("Stock Settings", "default_warehouse") or frappe.db.get_value(
+		"Warehouse", {"warehouse_name": _("Stores"), "company": company}
+	)
+
+	if not target:
+		frappe.throw(
+			_(
+				"No warehouse found for company {0}. Please set a Default Warehouse in Item Defaults or Stock Settings."
+			).format(frappe.bold(company))
+		)
+
+	return target
+
+
+def persist_serial_batch_fields_for_opening_stock(
+	item_code: str,
+	serial_no_series: str | None,
+	create_new_batch: int,
+	batch_number_series: str | None,
+) -> None:
+	fields_to_update = {}
+
+	if serial_no_series:
+		fields_to_update["serial_no_series"] = serial_no_series
+
+	if create_new_batch:
+		fields_to_update["create_new_batch"] = 1
+		if batch_number_series:
+			fields_to_update["batch_number_series"] = batch_number_series
+
+	if fields_to_update:
+		frappe.db.set_value("Item", item_code, fields_to_update)

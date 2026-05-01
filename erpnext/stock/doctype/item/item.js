@@ -175,10 +175,18 @@ frappe.ui.form.on("Item", {
 				__("View")
 			);
 
-			frm.toggle_display(
-				["opening_stock"],
-				frappe.model.can_create("Stock Entry") && frappe.model.can_write("Stock Entry")
-			);
+			const can_create_stock_entry =
+				frappe.model.can_create("Stock Entry") && frappe.model.can_write("Stock Entry");
+
+			const has_existing_stock = frm.doc.__onload && frm.doc.__onload.stock_exists ? 1 : 0;
+
+			if (can_create_stock_entry && !has_existing_stock) {
+				frm.add_custom_button(
+					__("Set Opening Stock"),
+					() => erpnext.item.show_opening_stock_dialog(frm),
+					__("Actions")
+				);
+			}
 		}
 
 		if (frm.doc.is_fixed_asset) {
@@ -701,6 +709,148 @@ $.extend(erpnext.item, {
 			},
 			__("Actions")
 		);
+	},
+
+	show_opening_stock_dialog: function (frm) {
+		const companies = (frm.doc.item_defaults || []).map((d) => d.company).filter(Boolean);
+
+		if (!companies.length) {
+			frappe.msgprint({
+				title: __("No Company Found"),
+				message: __(
+					"Please add at least one row in Item Defaults with a Company before setting opening stock."
+				),
+				indicator: "orange",
+			});
+			return;
+		}
+
+		const get_warehouse_for_company = (company) => {
+			const row = (frm.doc.item_defaults || []).find((d) => d.company === company);
+			return (row && row.default_warehouse) || "";
+		};
+
+		const has_serial = cint(frm.doc.has_serial_no);
+		const has_batch = cint(frm.doc.has_batch_no);
+
+		const fields = [
+			{
+				label: __("Company"),
+				fieldname: "company",
+				fieldtype: "Select",
+				options: companies.join("\n"),
+				default: companies[0],
+				reqd: 1,
+				onchange: function () {
+					const warehouse = get_warehouse_for_company(dialog.get_value("company"));
+					dialog.set_value("warehouse", warehouse);
+					dialog.set_df_property(
+						"warehouse",
+						"description",
+						warehouse
+							? __("Default warehouse from Item Defaults.")
+							: __(
+									"No default warehouse set for this company. Entry will use Stock Settings default."
+							  )
+					);
+				},
+			},
+			{
+				label: __("Default Warehouse"),
+				fieldname: "warehouse",
+				fieldtype: "Data",
+				read_only: 1,
+				description: __("Default warehouse from Item Defaults."),
+			},
+			{ fieldtype: "Column Break" },
+			{
+				label: __("Opening Stock"),
+				fieldname: "qty",
+				fieldtype: "Float",
+				default: frm.doc.opening_stock || 1,
+				reqd: 1,
+			},
+			{
+				label: __("Valuation Rate"),
+				fieldname: "valuation_rate",
+				fieldtype: "Currency",
+				default: frm.doc.valuation_rate || 0,
+				description: __("Leave as 0 to allow zero valuation rate."),
+			},
+		];
+
+		if (has_serial) {
+			fields.push(
+				{ fieldtype: "Section Break", label: __("Serial / Batch") },
+				{
+					label: __("Serial No Series"),
+					fieldname: "serial_no_series",
+					fieldtype: "Data",
+					default: frm.doc.serial_no_series || "",
+					reqd: 1,
+					description: __(
+						"Example: SN-.YYYY.-.#####. - One serial number will be created per unit of qty."
+					),
+				}
+			);
+		}
+
+		if (has_batch) {
+			if (!has_serial) {
+				fields.push({ fieldtype: "Section Break", label: __("Serial Nos / Batches") });
+			}
+			fields.push(
+				{
+					label: __("Automatically Create New Batch"),
+					fieldname: "create_new_batch",
+					fieldtype: "Check",
+					default: 1,
+					read_only: 1,
+				},
+				{
+					label: __("Batch Number Series"),
+					fieldname: "batch_number_series",
+					fieldtype: "Data",
+					default: frm.doc.batch_number_series || "",
+					reqd: 1,
+					description: __(
+						"Example: BATCH-.YYYY.-.#####. - A new batch will be auto-created from this series."
+					),
+				}
+			);
+		}
+
+		const dialog = new frappe.ui.Dialog({
+			title: __("Set Opening Stock"),
+			fields: fields,
+			primary_action_label: __("Create Stock Entry"),
+			primary_action: function (values) {
+				frappe.call({
+					method: "erpnext.stock.doctype.item.item.make_opening_stock_entry",
+					args: {
+						item_code: frm.doc.name,
+						company: values.company,
+						qty: values.qty,
+						valuation_rate: values.valuation_rate || 0,
+						warehouse: values.warehouse || null,
+						serial_no_series: values.serial_no_series || null,
+						create_new_batch: values.create_new_batch ? 1 : 0,
+						batch_number_series: values.batch_number_series || null,
+					},
+					freeze: true,
+					freeze_message: __("Creating Opening Stock Entry..."),
+					callback: function (r) {
+						if (!r.exc && r.message) {
+							dialog.hide();
+							frm.reload_doc();
+						}
+					},
+				});
+			},
+		});
+
+		dialog.set_value("warehouse", get_warehouse_for_company(companies[0]));
+		dialog.show();
 	},
 
 	weight_to_validate: function (frm) {

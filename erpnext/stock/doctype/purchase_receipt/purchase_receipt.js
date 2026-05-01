@@ -136,6 +136,7 @@ frappe.ui.form.on("Purchase Receipt", {
 							company: frm.doc.company,
 							update_stock: 0,
 						},
+						cur_items: frm.doc.items,
 						allow_child_item_selection: true,
 						child_fieldname: "items",
 						child_columns: ["item_code", "item_name", "qty", "received_qty"],
@@ -236,6 +237,7 @@ erpnext.stock.PurchaseReceiptController = class PurchaseReceiptController extend
 								per_received: ["<", 99.99],
 								company: me.frm.doc.company,
 							},
+							cur_items: me.frm.doc.items,
 							allow_child_item_selection: true,
 							child_fieldname: "items",
 							child_columns: ["item_code", "item_name", "qty", "received_qty"],
@@ -431,6 +433,18 @@ frappe.ui.form.on("Purchase Receipt", "is_subcontracted", function (frm) {
 frappe.ui.form.on("Purchase Receipt Item", {
 	item_code: function (frm, cdt, cdn) {
 		var d = locals[cdt][cdn];
+		if (d.purchase_invoice) {
+			frappe.model.set_value(cdt, cdn, "purchase_invoice", null);
+		}
+		if (d.purchase_invoice_item) {
+			frappe.model.set_value(cdt, cdn, "purchase_invoice_item", null);
+		}
+		if (d.purchase_order) {
+			frappe.model.set_value(cdt, cdn, "purchase_order", null);
+		}
+		if (d.purchase_order_item) {
+			frappe.model.set_value(cdt, cdn, "purchase_order_item", null);
+		}
 		frappe.db.get_value("Item", { name: d.item_code }, "sample_quantity", (r) => {
 			frappe.model.set_value(cdt, cdn, "sample_quantity", r.sample_quantity);
 			validate_sample_quantity(frm, cdt, cdn);

@@ -36,6 +36,7 @@ from erpnext.accounts.party import get_due_date, get_party_account
 from erpnext.accounts.utils import get_account_currency, get_fiscal_year, update_voucher_outstanding
 from erpnext.assets.doctype.asset.asset import is_cwip_accounting_enabled
 from erpnext.assets.doctype.asset_category.asset_category import get_asset_category_account
+from erpnext.buying.doctype.purchase_order.purchase_order import merge_and_remove_duplicate_items
 from erpnext.buying.utils import check_on_hold_or_closed_status
 from erpnext.controllers.accounts_controller import merge_taxes, validate_account_head
 from erpnext.controllers.buying_controller import BuyingController
@@ -2012,6 +2013,7 @@ def make_purchase_receipt(
 		args = json.loads(args)
 
 	def post_parent_process(source_parent, target_parent):
+		merge_and_remove_duplicate_items(source_parent, target_parent, "purchase_invoice_item")
 		remove_items_with_zero_qty(target_parent)
 		set_missing_values(source_parent, target_parent)
 

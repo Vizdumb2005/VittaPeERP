@@ -16,6 +16,7 @@ from pypika import functions as fn
 import erpnext
 from erpnext.accounts.utils import get_account_currency
 from erpnext.assets.doctype.asset.asset import get_asset_account, is_cwip_accounting_enabled
+from erpnext.buying.doctype.purchase_order.purchase_order import merge_and_remove_duplicate_items
 from erpnext.buying.utils import check_on_hold_or_closed_status
 from erpnext.controllers.accounts_controller import merge_taxes
 from erpnext.controllers.buying_controller import BuyingController
@@ -1497,6 +1498,8 @@ def make_purchase_invoice(
 	invoiced_qty_map = get_invoiced_qty_map(source_name)
 
 	def set_missing_values(source, target):
+		merge_and_remove_duplicate_items(source, target, "pr_detail", "po_detail")
+
 		if len(target.get("items")) == 0:
 			frappe.throw(_("All items have already been Invoiced/Returned"))
 

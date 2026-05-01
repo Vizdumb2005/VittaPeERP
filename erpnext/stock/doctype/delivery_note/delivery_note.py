@@ -867,6 +867,10 @@ def make_sales_invoice(
 	invoiced_qty_map = get_invoiced_qty_map(source_name)
 
 	def set_missing_values(source, target):
+		from erpnext.buying.doctype.purchase_order.purchase_order import merge_and_remove_duplicate_items
+
+		merge_and_remove_duplicate_items(source, target, "dn_detail", "so_detail")
+
 		target.run_method("set_missing_values")
 		target.run_method("set_po_nos")
 

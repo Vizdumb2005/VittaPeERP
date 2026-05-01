@@ -8,9 +8,6 @@ frappe.ui.form.on("POS Closing Entry", {
 			return { filters: { status: "Open", docstatus: 1 } };
 		});
 
-		if (frm.doc.docstatus === 0 && !frm.doc.amended_from)
-			frm.set_value("period_end_date", frappe.datetime.now_datetime());
-
 		frappe.realtime.on("closing_process_complete", async function (data) {
 			await frm.reload_doc();
 			if (frm.doc.status == "Failed" && frm.doc.error_message) {
@@ -56,7 +53,7 @@ frappe.ui.form.on("POS Closing Entry", {
 		}
 	},
 
-	pos_opening_entry(frm) {
+	reload_invoices: function (frm) {
 		if (
 			frm.doc.pos_opening_entry &&
 			frm.doc.period_start_date &&
@@ -71,6 +68,18 @@ frappe.ui.form.on("POS Closing Entry", {
 				() => frappe.dom.unfreeze(),
 			]);
 		}
+	},
+
+	pos_opening_entry(frm) {
+		frm.trigger("reload_invoices");
+	},
+
+	period_start_date(frm) {
+		frm.trigger("reload_invoices");
+	},
+
+	period_end_date(frm) {
+		frm.trigger("reload_invoices");
 	},
 
 	set_opening_amounts(frm) {

@@ -127,6 +127,8 @@
   "column_break_32",
   "stock_adjustment_account",
   "stock_received_but_not_billed",
+  "stock_delivered_but_not_billed",
+  "disable_sdbnb_in_sr",
   "default_provisional_account",
   "default_in_transit_warehouse",
   "manufacturing_section",
@@ -962,6 +964,21 @@
   {
    "fieldname": "accounts_closing_section",
    "fieldtype": "Section Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "disable_sdbnb_in_sr",
+   "fieldtype": "Check",
+   "label": "Disable Stock Delivered But Not Billed in Sales Return",
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stock_delivered_but_not_billed",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "Stock Delivered But Not Billed",
+   "no_copy": 1,
+   "options": "Account"
   }
  ],
  "grid_page_length": 50,

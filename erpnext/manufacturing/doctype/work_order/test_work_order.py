@@ -31,6 +31,7 @@ from erpnext.stock.doctype.serial_and_batch_bundle.test_serial_and_batch_bundle 
 )
 from erpnext.stock.doctype.serial_no.serial_no import get_serial_nos
 from erpnext.stock.doctype.stock_entry import test_stock_entry
+from erpnext.stock.doctype.stock_entry.manufacturing_handler import ManufactureHandler
 from erpnext.stock.doctype.warehouse.test_warehouse import create_warehouse
 from erpnext.stock.utils import get_bin
 from erpnext.tests.utils import ERPNextTestSuite
@@ -1319,7 +1320,7 @@ class TestWorkOrder(ERPNextTestSuite):
 
 			stock_entry = frappe.get_doc(make_stock_entry(wo_order.name, "Manufacture", 10))
 			stock_entry.set_work_order_details()
-			stock_entry.set_serial_no_batch_for_finished_good()
+			ManufactureHandler(stock_entry).set_serial_no_for_finished_good()
 			for row in stock_entry.items:
 				if row.item_code == fg_item:
 					self.assertTrue(row.serial_and_batch_bundle)
@@ -1360,7 +1361,7 @@ class TestWorkOrder(ERPNextTestSuite):
 
 			stock_entry = frappe.get_doc(make_stock_entry(wo_order.name, "Manufacture", 10))
 			stock_entry.set_work_order_details()
-			stock_entry.set_serial_no_batch_for_finished_good()
+			ManufactureHandler(stock_entry).set_serial_no_for_finished_good()
 			for row in stock_entry.items:
 				if row.item_code == fg_item:
 					self.assertTrue(row.serial_and_batch_bundle)

@@ -1476,6 +1476,8 @@ class JobCard(Document):
 
 	@frappe.whitelist()
 	def make_stock_entry_for_semi_fg_item(self, auto_submit: bool = False):
+		from erpnext.stock.doctype.stock_entry.manufacturing_handler import ManufactureHandler
+
 		def get_consumed_process_loss():
 			table = frappe.qb.DocType("Stock Entry")
 			query = (
@@ -1511,9 +1513,7 @@ class JobCard(Document):
 		ste.stock_entry.flags.ignore_mandatory = True
 		wo_doc = frappe.get_doc("Work Order", self.work_order)
 		add_additional_cost(ste.stock_entry, wo_doc, self)
-
-		ste.stock_entry.pro_doc = frappe.get_doc("Work Order", self.work_order)
-		ste.stock_entry.set_secondary_items_from_job_card()
+		ManufactureHandler(ste.stock_entry).set_secondary_items_from_job_card()
 		for row in ste.stock_entry.items:
 			if (row.type or row.is_legacy_scrap_item) and not row.t_warehouse:
 				row.t_warehouse = self.target_warehouse

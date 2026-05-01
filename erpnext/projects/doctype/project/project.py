@@ -164,6 +164,40 @@ class Project(Document):
 			self.check_depends_on_value(template_task, project_task, project_tasks)
 			self.check_for_parent_tasks(template_task, project_task, project_tasks)
 
+	def set_consumed_material_cost(self):
+		parent_doc = frappe.qb.DocType("Stock Entry")
+		child_doc = frappe.qb.DocType("Stock Entry Detail")
+		lcv_doc = frappe.qb.DocType("Landed Cost Taxes and Charges")
+
+		amount = (
+			qb.from_(child_doc)
+			.select(Sum(child_doc.amount))
+			.where(
+				(child_doc.project == self.name)
+				& (child_doc.docstatus == 1)
+				& ((child_doc.t_warehouse.isnull()) | (child_doc.t_warehouse == ""))
+			)
+		).run(as_list=1)
+
+		amount = flt(amount[0][0]) if amount else 0
+
+		additional_costs = (
+			qb.from_(parent_doc)
+			.join(lcv_doc)
+			.on(parent_doc.name == lcv_doc.parent)
+			.select(Sum(lcv_doc.base_amount))
+			.where(
+				(parent_doc.project == self.name)
+				& (parent_doc.docstatus == 1)
+				& (parent_doc.purpose == "Manufacture")
+			)
+		).run(as_list=1)
+
+		additional_cost_amt = flt(additional_costs[0][0]) if additional_costs else 0
+
+		amount += additional_cost_amt
+		self.total_consumed_material_cost = amount
+
 	def check_depends_on_value(self, template_task, project_task, project_tasks):
 		if template_task.get("depends_on") and not project_task.get("depends_on"):
 			project_template_map = {pt.template_task: pt for pt in project_tasks}

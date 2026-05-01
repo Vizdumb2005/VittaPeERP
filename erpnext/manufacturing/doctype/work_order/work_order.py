@@ -2453,10 +2453,6 @@ def make_stock_entry(
 	stock_entry.set_stock_entry_type()
 	stock_entry.is_additional_transfer_entry = is_additional_transfer_entry
 	stock_entry.get_items()
-	stock_entry.set_secondary_items_from_job_card()
-
-	if purpose != "Disassemble":
-		stock_entry.set_serial_no_batch_for_finished_good()
 
 	return stock_entry.as_dict()
 
@@ -2817,7 +2813,10 @@ def get_reserved_qty_for_production(
 
 @frappe.whitelist()
 def make_stock_return_entry(work_order: str):
-	from erpnext.stock.doctype.stock_entry.stock_entry import get_available_materials
+	from erpnext.stock.doctype.stock_entry.manufacturing_handler import (
+		ManufactureHandler,
+		get_available_materials,
+	)
 
 	non_consumed_items = get_available_materials(work_order)
 	if not non_consumed_items:
@@ -2831,7 +2830,7 @@ def make_stock_return_entry(work_order: str):
 	stock_entry.work_order = work_order
 	stock_entry.purpose = "Material Transfer for Manufacture"
 	stock_entry.bom_no = wo_doc.bom_no
-	stock_entry.add_transfered_raw_materials_in_items()
+	ManufactureHandler(stock_entry).add_transfered_raw_materials_in_items()
 	stock_entry.set_stock_entry_type()
 
 	return stock_entry

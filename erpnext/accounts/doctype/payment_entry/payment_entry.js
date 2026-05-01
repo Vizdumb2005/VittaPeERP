@@ -1751,7 +1751,8 @@ frappe.ui.form.on("Payment Entry Reference", {
 	},
 
 	reference_name: function (frm, cdt, cdn) {
-		var row = locals[cdt][cdn];
+		const row = locals[cdt][cdn];
+		const previous_allocated_amount = flt(row.allocated_amount);
 		if (row.reference_name && row.reference_doctype) {
 			return frappe.call({
 				method: "erpnext.accounts.doctype.payment_entry.payment_entry.get_reference_details",
@@ -1771,13 +1772,51 @@ frappe.ui.form.on("Payment Entry Reference", {
 							frappe.model.set_value(cdt, cdn, field, value);
 						});
 
-						let allocated_amount =
-							frm.doc.unallocated_amount > row.outstanding_amount
-								? row.outstanding_amount
-								: frm.doc.unallocated_amount;
+						frappe.model.set_value(cdt, cdn, "payment_request", null);
 
-						frappe.model.set_value(cdt, cdn, "allocated_amount", allocated_amount);
-						frm.refresh_fields();
+						if (row.outstanding_amount == 0) {
+							frappe.model.set_value(cdt, cdn, "allocated_amount", 0);
+							return;
+						}
+
+						const existing_prs = (frm.doc.references || [])
+							.filter((r) => r.name !== row.name && r.payment_request)
+							.map((r) => r.payment_request);
+
+						// Restore the row's previous allocated_amount to get the full unallocated amount.
+						const unallocated_amount = frm.doc.unallocated_amount + previous_allocated_amount;
+
+						if (unallocated_amount == 0) {
+							frappe.model.set_value(cdt, cdn, "allocated_amount", 0);
+							return;
+						}
+
+						frappe.call({
+							method: "erpnext.accounts.doctype.payment_entry.payment_entry.get_best_fit_payment_request",
+							args: {
+								reference_doctype: row.reference_doctype,
+								reference_name: row.reference_name,
+								unallocated_amount: unallocated_amount,
+								existing_prs: existing_prs,
+							},
+							callback: function (r) {
+								const allocated_amount = Math.min(
+									flt(row.outstanding_amount),
+									flt(unallocated_amount)
+								);
+								const values = { allocated_amount };
+
+								if (r.message) {
+									values.payment_request = r.message.payment_request;
+									values.allocated_amount = Math.min(
+										allocated_amount,
+										flt(r.message.outstanding_amount)
+									);
+								}
+								frappe.model.set_value(cdt, cdn, values);
+								frm.refresh_fields();
+							},
+						});
 					}
 				},
 			});

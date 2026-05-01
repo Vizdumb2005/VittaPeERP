@@ -2862,6 +2862,68 @@ def get_reference_details(
 
 
 @frappe.whitelist()
+def get_best_fit_payment_request(
+	reference_doctype: str,
+	reference_name: str,
+	unallocated_amount: float | None = None,
+	existing_prs: list | str | None = None,
+) -> dict | None:
+	"""
+	Return the best-fit open Payment Request for a given reference.
+	"""
+
+	frappe.has_permission("Payment Entry", ptype="write", throw=True)
+	frappe.has_permission("Payment Request", ptype="read", throw=True)
+
+	unallocated_amount = flt(unallocated_amount)
+
+	pr_map = get_open_payment_requests_for_references(
+		[frappe._dict({"reference_doctype": reference_doctype, "reference_name": reference_name})]
+	)
+
+	if not pr_map:
+		return None
+
+	pr_dict = pr_map.get((reference_doctype, reference_name))
+	if not pr_dict:
+		return None
+
+	open_prs = list(pr_dict.items())
+
+	if isinstance(existing_prs, str):
+		existing_prs = frappe.parse_json(existing_prs)
+
+	if existing_prs:
+		open_prs = [pr for pr in open_prs if pr[0] not in existing_prs]
+
+	if not open_prs:
+		return None
+
+	matched_pr = None
+
+	if unallocated_amount > 0:
+		# picks the PR whose outstanding amount exactly equals the unallocated amount.
+		matched_pr = next((pr for pr in open_prs if pr[1] == unallocated_amount), None)
+
+		# picks the largest PR whose outstanding amount is still within the unallocated amount.
+		if not matched_pr:
+			fitting = [pr for pr in open_prs if pr[1] <= unallocated_amount]
+			if fitting:
+				matched_pr = max(fitting, key=lambda pr: pr[1])
+
+	if not matched_pr:
+		# picks the oldest PR in the list when no amount-based match is found.
+		matched_pr = open_prs[0]
+
+	return frappe._dict(
+		{
+			"payment_request": matched_pr[0],
+			"outstanding_amount": matched_pr[1],
+		}
+	)
+
+
+@frappe.whitelist()
 def get_payment_entry(
 	dt: str,
 	dn: str,
@@ -3044,7 +3106,7 @@ def get_open_payment_requests_for_references(references=None):
 	refs = {
 		(row.reference_doctype, row.reference_name)
 		for row in references
-		if row.reference_doctype and row.reference_name and row.allocated_amount
+		if row.reference_doctype and row.reference_name
 	}
 
 	if not refs:
@@ -3064,14 +3126,13 @@ def get_open_payment_requests_for_references(references=None):
 
 	if not response:
 		return
-
-	reference_payment_requests = {}
+	reference_payment_requests = frappe._dict({})
 
 	for row in response:
 		key = (row.reference_doctype, row.reference_name)
 
 		if key not in reference_payment_requests:
-			reference_payment_requests[key] = {row.name: row.outstanding_amount}
+			reference_payment_requests[key] = frappe._dict({row.name: row.outstanding_amount})
 		else:
 			reference_payment_requests[key][row.name] = row.outstanding_amount
 

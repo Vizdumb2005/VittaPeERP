@@ -1,7 +1,3 @@
-cur_frm.add_fetch("payment_gateway_account", "payment_account", "payment_account");
-cur_frm.add_fetch("payment_gateway_account", "payment_gateway", "payment_gateway");
-cur_frm.add_fetch("payment_gateway_account", "message", "message");
-
 frappe.ui.form.on("Payment Request", {
 	setup: function (frm) {
 		frm.set_query("party_type", function () {
@@ -10,13 +6,18 @@ frappe.ui.form.on("Payment Request", {
 			};
 		});
 
-		frm.set_query("payment_gateway_account", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-				},
-			};
-		});
+		if (frm.fields_dict.payment_gateway_account) {
+			frm.set_query("payment_gateway_account", function () {
+				return {
+					filters: {
+						parent: frm.doc.payment_gateway,
+						parenttype: "Payment Gateway",
+					},
+				};
+			});
+			frm.set_df_property("payment_account", "read_only", 1);
+			frm.add_fetch("payment_gateway_account", "payment_account", "payment_account");
+		}
 	},
 });
 
@@ -80,7 +81,12 @@ frappe.ui.form.on("Payment Request", "refresh", function (frm) {
 });
 
 frappe.ui.form.on("Payment Request", "is_a_subscription", function (frm) {
-	frm.toggle_reqd("payment_gateway_account", frm.doc.is_a_subscription);
+	if (frm.fields_dict.payment_gateway) {
+		frm.toggle_reqd("payment_gateway", frm.doc.is_a_subscription);
+	}
+	if (frm.fields_dict.payment_gateway_account) {
+		frm.toggle_reqd("payment_gateway_account", frm.doc.is_a_subscription);
+	}
 	frm.toggle_reqd("subscription_plans", frm.doc.is_a_subscription);
 
 	if (frm.doc.is_a_subscription && frm.doc.reference_doctype && frm.doc.reference_name) {

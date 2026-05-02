@@ -1,0 +1,6 @@
+app_name = "smart_forms"
+app_title = "Smart Forms"
+app_publisher = "VittaPeERP"
+app_description = "Dynamic forms with PDF rendering"
+app_email = "support@example.com"
+app_license = "mit"

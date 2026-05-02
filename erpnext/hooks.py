@@ -375,6 +375,10 @@ doc_events = {
 		"on_cancel": ["erpnext.accounts.doctype.dunning.dunning.resolve_dunning"],
 		"on_trash": "erpnext.regional.check_deletion_permission",
 	},
+	"Salary Slip": {
+		"after_insert": "erpnext.payroll.salary_slip_approval.create_salary_slip_approval_request",
+		"validate": "erpnext.payroll.salary_slip_approval.validate_salary_slip_approval",
+	},
 	"Address": {
 		"validate": [
 			"erpnext.regional.italy.utils.set_state_code",
